@@ -1,0 +1,11 @@
+{
+  "name": "filmlog",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix backend run build"
+  },
+  "dependencies": {
+    "@neon/config": "^1.13.0",
+    "@neon/env": "^2.1.0"
+  }
+}
