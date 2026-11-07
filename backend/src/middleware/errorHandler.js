@@ -15,7 +15,13 @@ export function errorHandler(err, req, res, next) {
   // Detail error hanya ke log server; client tidak boleh melihat stack/SQL.
   if (status >= 500) console.error(err);
 
-  res.status(status).json({
+  const body = {
     message: status >= 500 ? 'Terjadi kesalahan pada server' : err.message,
-  });
+  };
+
+  // Kegagalan validasi menyertakan rincian per field; frontend tetap hanya
+  // membaca `message`, field ini untuk debugging dan klien lain.
+  if (status < 500 && Array.isArray(err.errors)) body.errors = err.errors;
+
+  res.status(status).json(body);
 }

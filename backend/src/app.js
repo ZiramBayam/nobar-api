@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
+import { apiRouter } from './routes/index.js';
 
 export function createApp() {
   const app = express();
@@ -20,6 +21,8 @@ export function createApp() {
   app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
   });
+
+  app.use('/api', apiRouter);
 
   app.use(notFound);
   app.use(errorHandler);
