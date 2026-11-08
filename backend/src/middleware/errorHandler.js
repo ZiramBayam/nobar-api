@@ -45,11 +45,18 @@ export function errorHandler(err, req, res, next) {
   const message = mapped?.message ?? err.message;
   const errors = mapped?.errors ?? err.errors;
 
+  // 502/503 dan error PG yang sudah dipetakan adalah kegagalan yang disengaja
+  // dan pesannya aman untuk user. Hanya error tak terduga yang disamarkan.
+  const isIntentional = Boolean(mapped) || err instanceof HttpError;
+
   // Detail error hanya ke log server; client tidak boleh melihat stack/SQL.
-  if (status >= 500) console.error(err);
+  if (status >= 500) {
+    if (isIntentional) console.error(`${status} ${message}`);
+    else console.error(err);
+  }
 
   const body = {
-    message: status >= 500 ? 'Terjadi kesalahan pada server' : message,
+    message: status >= 500 && !isIntentional ? 'Terjadi kesalahan pada server' : message,
   };
 
   // Kegagalan validasi menyertakan rincian per field; frontend tetap hanya
