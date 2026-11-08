@@ -9,7 +9,7 @@ import { apiRouter } from './routes/index.js';
 export function createApp() {
   const app = express();
 
-  // Di belakang proxy Render, req.ip harus membaca IP asli untuk rate limit.
+  // Di belakang proxy Railway, req.ip harus membaca IP asli untuk rate limit.
   app.set('trust proxy', 1);
 
   app.use(helmet());
