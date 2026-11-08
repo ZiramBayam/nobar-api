@@ -1,7 +1,10 @@
 import { GoogleGenAI } from '@google/genai';
 import { env } from '../config/env.js';
 
-const TIMEOUT_MS = 15000;
+// 25 detik, bukan 15: panggilan live pernah 10-11 detik dan satu kali
+// melewati 15 detik, sehingga batas terlalu ketat menghasilkan 502 palsu.
+// Nilai ini tetap membatasi request yang menggantung.
+const TIMEOUT_MS = 25000;
 let client;
 
 // Klien dibuat lazy: server tetap boot tanpa GEMINI_API_KEY, dan endpoint lain
