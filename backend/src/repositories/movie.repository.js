@@ -53,3 +53,17 @@ export async function findById(id) {
 
   return rows[0] ?? null;
 }
+
+// Dipakai watchlist/review agar daftar tidak memicu satu query per film.
+// Array kosong harus berhenti di sini: `= ANY('{}')` valid, tetapi tidak perlu
+// membangunkan DB untuk hasil yang pasti kosong.
+export async function findByIds(ids) {
+  if (ids.length === 0) return [];
+
+  const { rows } = await pool.query(
+    `${MOVIE_SELECT} WHERE m.id = ANY($1) GROUP BY m.id`,
+    [ids],
+  );
+
+  return rows;
+}

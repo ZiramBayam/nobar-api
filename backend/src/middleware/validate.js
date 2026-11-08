@@ -7,12 +7,17 @@ export function validate(schemas) {
     const validated = {};
 
     for (const [source, schema] of Object.entries(schemas)) {
-      const result = schema.safeParse(req[source]);
+      // Express 5 meninggalkan req.body undefined saat body kosong. Anggap
+      // objek kosong agar pesan yang muncul per field ("Film wajib diisi"),
+      // bukan pesan bawaan Zod yang berbahasa Inggris.
+      const input = source === 'body' ? (req.body ?? {}) : req[source];
+      const result = schema.safeParse(input);
 
       if (!result.success) {
         const errors = result.error.issues.map((issue) => ({
           field: issue.path.join('.') || source,
-          message: issue.message,
+          // Issue tanpa path berarti body bukan objek (mis. array/null).
+          message: issue.path.length === 0 ? 'Body request tidak valid' : issue.message,
         }));
 
         // Frontend hanya membaca `message`; `errors` membantu debugging.
