@@ -1,0 +1,569 @@
+openapi: 3.1.0
+info:
+  title: FilmLog API
+  version: 1.0.0
+  description: |
+    API watchlist dan review film untuk FilmLog.
+    Semua error memakai bentuk `{ "message": "..." }`; error validasi menambahkan
+    array `errors` berisi `{ field, message }`.
+servers:
+  - url: https://api-production-1e4c.up.railway.app
+    description: Deployment Railway
+  - url: http://localhost:8000
+    description: Lokal
+tags:
+  - name: Health
+  - name: Auth
+  - name: Movies
+  - name: Recommendation
+  - name: Watchlist
+  - name: Watched
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Cek status server tanpa menyentuh database
+      responses:
+        '200':
+          description: Server hidup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Daftarkan user baru
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registrasi berhasil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Email sudah terdaftar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Email sudah terdaftar
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login dan dapatkan JWT
+      description: |
+        Pesan 401 sengaja generik untuk email tidak terdaftar maupun password salah.
+        Rate limit 10 percobaan per menit per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Email atau password salah
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Email atau password salah
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/movies:
+    get:
+      tags: [Movies]
+      summary: Daftar film dengan filter opsional
+      parameters:
+        - name: genre
+          in: query
+          description: Nama genre, tidak peduli kapitalisasi
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Cocok sebagian pada judul atau sutradara (ILIKE)
+          schema:
+            type: string
+        - name: shuffle
+          in: query
+          description: Hanya menerima nilai `true`
+          schema:
+            type: string
+            enum: ['true']
+      responses:
+        '200':
+          description: Array film (boleh kosong)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/movies/{id}:
+    get:
+      tags: [Movies]
+      summary: Detail satu film
+      parameters:
+        - $ref: '#/components/parameters/MovieId'
+      responses:
+        '200':
+          description: Detail film
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movie'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/movies/recommend:
+    post:
+      tags: [Recommendation]
+      summary: Rekomendasi film dari Gemini (publik, di-rate-limit)
+      description: |
+        Katalog 20 film dimasukkan ke prompt, keluaran dibatasi JSON Schema,
+        lalu divalidasi ulang di server. Hasil tidak valid di-retry sekali.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendRequest'
+      responses:
+        '200':
+          description: Rekomendasi valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: Gemini gagal atau keluarannya tidak valid setelah retry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Layanan rekomendasi sedang bermasalah, coba lagi sebentar
+        '503':
+          description: Gemini belum dikonfigurasi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Layanan rekomendasi belum dikonfigurasi
+
+  /api/watchlist:
+    get:
+      tags: [Watchlist]
+      summary: Daftar watchlist user yang login
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Watchlist urut created_at DESC
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WatchlistItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Watchlist]
+      summary: Tambah film ke watchlist
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [movieId]
+              properties:
+                movieId:
+                  type: integer
+                  minimum: 1
+      responses:
+        '201':
+          description: Film ditambahkan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchlistItem'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Film sudah ada di watchlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Film sudah ada di watchlist
+
+  /api/watchlist/{movieId}:
+    delete:
+      tags: [Watchlist]
+      summary: Hapus film dari watchlist
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MovieId'
+      responses:
+        '204':
+          description: Entri dihapus, tanpa body
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Film tidak ada di watchlist user ini
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: Film tidak ada di watchlist
+
+  /api/watched:
+    get:
+      tags: [Watched]
+      summary: Daftar film yang sudah ditonton beserta review
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Daftar review urut updated_at DESC
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Watched]
+      summary: Simpan review (upsert per user + film)
+      description: |
+        Review baru mengembalikan 201; review yang sudah ada diperbarui dan
+        mengembalikan 200 dengan `id` serta `created_at` yang sama.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRequest'
+      responses:
+        '200':
+          description: Review diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewItem'
+        '201':
+          description: Review baru dibuat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewItem'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    MovieId:
+      name: id
+      in: path
+      required: true
+      description: ID film (bilangan bulat positif)
+      schema:
+        type: integer
+        minimum: 1
+
+  responses:
+    ValidationError:
+      description: Input tidak valid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+          example:
+            message: Rating harus bilangan bulat 1-5
+            errors:
+              - field: rating
+                message: Rating harus bilangan bulat 1-5
+    Unauthorized:
+      description: Token tidak ada, rusak, kedaluwarsa, atau user sudah dihapus
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missing:
+              value:
+                message: Token tidak ditemukan
+            invalid:
+              value:
+                message: Token tidak valid
+            expired:
+              value:
+                message: Sesi berakhir, silakan login lagi
+    NotFound:
+      description: Resource tidak ditemukan
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Film tidak ditemukan
+    RateLimited:
+      description: Terlalu banyak request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            message: Terlalu banyak permintaan rekomendasi, coba lagi nanti
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    ValidationError:
+      type: object
+      required: [message, errors]
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    User:
+      type: object
+      required: [id, username, email]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 50
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          description: Maksimal 72 byte karena batas bcrypt
+          maxLength: 72
+
+    RegisterResponse:
+      type: object
+      required: [message, user]
+      properties:
+        message:
+          type: string
+          const: Registrasi berhasil
+        user:
+          $ref: '#/components/schemas/User'
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT HS256 dengan klaim sub berupa string
+        user:
+          $ref: '#/components/schemas/User'
+
+    Movie:
+      type: object
+      required:
+        [id, title, year, director, rating, duration, synopsis, poster_url, cast, genres]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        year:
+          type: integer
+        director:
+          type: string
+        rating:
+          type: number
+        duration:
+          type: string
+        synopsis:
+          type: string
+        poster_url:
+          type: string
+        cast:
+          type: array
+          items:
+            type: string
+        genres:
+          type: array
+          items:
+            type: string
+
+    WatchlistItem:
+      type: object
+      required: [movie_id, created_at, movie]
+      properties:
+        movie_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        movie:
+          $ref: '#/components/schemas/Movie'
+
+    ReviewRequest:
+      type: object
+      required: [movieId, rating, review]
+      properties:
+        movieId:
+          type: integer
+          minimum: 1
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        review:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    ReviewItem:
+      type: object
+      required: [id, movie_id, rating, review, created_at, updated_at, movie]
+      properties:
+        id:
+          type: integer
+        movie_id:
+          type: integer
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        review:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        movie:
+          $ref: '#/components/schemas/Movie'
+
+    RecommendRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    Recommendation:
+      type: object
+      required: [movie_id, reasoning]
+      properties:
+        movie_id:
+          type: integer
+          description: Selalu salah satu ID yang ada di katalog
+        reasoning:
+          type: string
