@@ -21,6 +21,24 @@ npm run dev            # http://localhost:8000
 Variabel environment yang dipakai ada di [`.env.example`](./.env.example).
 `DATABASE_URL` untuk aplikasi, `TEST_DATABASE_URL` untuk test (wajib berbeda).
 
+## Menjalankan bersama frontend
+
+Frontend adalah file statis di `frontend/` dan tidak perlu build. Dari root repo:
+
+```bash
+python3 -m http.server 3000
+```
+
+Buka `http://localhost:3000/frontend/`, lalu buka modal pengaturan API dan isi:
+
+- lokal: `http://localhost:8000/api`
+- live: `https://api-production-1e4c.up.railway.app/api`
+
+Nilai disimpan di `localStorage.filmlog_api_url`. CORS default `*`; jika
+`CORS_ORIGIN` diisi, nilainya harus cocok dengan origin frontend. Frontend
+mengirim token lama ke semua endpoint, karena itu middleware auth hanya dipasang
+di rute protected.
+
 ## Script
 
 | Perintah | Fungsi |
@@ -62,6 +80,9 @@ dibuka di Swagger Editor atau diimpor ke Postman).
 
 ## Deploy
 
+API live: `https://api-production-1e4c.up.railway.app` (health check: `/health`).
+
 Railway menjalankan `npm run start:prod` dengan healthcheck `/health`.
 Migrasi dan seed idempotent, jadi aman dijalankan setiap deploy. Request pertama
-setelah idle bisa lambat karena Neon bangun dari mode idle; ini normal.
+setelah idle bisa lambat (beberapa detik) karena Neon bangun dari mode idle dan
+container Railway baru start; ini normal dan bukan API yang rusak.
